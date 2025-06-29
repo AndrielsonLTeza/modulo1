@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Auth Module</title>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+  <h2>Register</h2>
+  <input id="regName" placeholder="Name">
+  <input id="regEmail" placeholder="Email">
+  <input id="regPassword" type="password" placeholder="Password">
+  <button id="registerBtn">Register</button>
+
+  <h2>Login</h2>
+  <input id="logEmail" placeholder="Email">
+  <input id="logPassword" type="password" placeholder="Password">
+  <button id="loginBtn">Login</button>
+
+  <h2>Validate Token</h2>
+  <input id="token" placeholder="Paste token here">
+  <button id="validateBtn">Validate</button>
+  <pre id="output"></pre>
+
+<script>
+const apiUrl = 'http://localhost:8080/api';
+
+$('#registerBtn').click(() => {
+  $.post(apiUrl + '/register', {
+    name: $('#regName').val(),
+    email: $('#regEmail').val(),
+    password: $('#regPassword').val()
+  }).done(res => alert(res));
+});
+
+$('#loginBtn').click(() => {
+  $.ajax({
+    url: apiUrl + '/login',
+    type: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({
+      email: $('#logEmail').val(),
+      password: $('#logPassword').val()
+    }),
+    success: res => $('#token').val(res.token),
+    error: () => alert('Invalid login')
+  });
+});
+
+$('#validateBtn').click(() => {
+  $.ajax({
+    url: apiUrl + '/validate-token',
+    type: 'POST',
+    headers: { Authorization: 'Bearer ' + $('#token').val() },
+    success: res => $('#output').text(JSON.stringify(res, null, 2)),
+    error: () => alert('Invalid token')
+  });
+});
+</script>
+</body>
+</html>
