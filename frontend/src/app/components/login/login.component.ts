@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
-import { AuthService, LoginRequest } from '../../services/auth.service';
+import { Router, ActivatedRoute } from '@angular/router';
+import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-login',
@@ -9,70 +9,58 @@ import { AuthService, LoginRequest } from '../../services/auth.service';
   styleUrls: ['./login.component.css']
 })
 export class LoginComponent implements OnInit {
-  loginForm: FormGroup;
+  loginForm!: FormGroup;
   loading = false;
+  submitted = false;
   error = '';
-  success = '';
+  returnUrl: string = '';
 
   constructor(
-    private fb: FormBuilder,
-    private authService: AuthService,
-    private router: Router
+    private formBuilder: FormBuilder,
+    private route: ActivatedRoute,
+    private router: Router,
+    private authService: AuthService
   ) {
-    this.loginForm = this.fb.group({
-      email: ['', [Validators.required, Validators.email]],
-      password: ['', [Validators.required, Validators.minLength(6)]]
-    });
-  }
-
-  ngOnInit(): void {
-    // Se já estiver logado, redirecionar para dashboard
-    if (this.authService.isAuthenticated()) {
+    if (this.authService.currentUserValue) {
       this.router.navigate(['/dashboard']);
     }
   }
 
-  onSubmit(): void {
-    if (this.loginForm.valid) {
-      this.loading = true;
-      this.error = '';
-      this.success = '';
+  ngOnInit() {
+    this.loginForm = this.formBuilder.group({
+      email: ['', [Validators.required, Validators.email]],
+      password: ['', Validators.required]
+    });
 
-      const credentials: LoginRequest = this.loginForm.value;
+    this.returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/dashboard';
+  }
 
-      this.authService.login(credentials).subscribe({
+  get f() { return this.loginForm.controls; }
+
+  onSubmit() {
+    this.submitted = true;
+
+    if (this.loginForm.invalid) {
+      return;
+    }
+
+    this.loading = true;
+    this.error = '';
+
+    this.authService.login(this.f['email'].value, this.f['password'].value)
+      .subscribe({
         next: (response) => {
-          this.loading = false;
           if (response.success) {
-            this.success = 'Login realizado com sucesso!';
-            setTimeout(() => {
-              this.router.navigate(['/dashboard']);
-            }, 1000);
+            this.router.navigate([this.returnUrl]);
           } else {
-            this.error = response.message || 'Erro no login';
+            this.error = response.message;
+            this.loading = false;
           }
         },
         error: (error) => {
+          this.error = error.error?.message || 'Erro ao fazer login';
           this.loading = false;
-          this.error = error.error?.message || 'Erro de conexão';
-          console.error('Login error:', error);
         }
       });
-    } else {
-      this.markFormGroupTouched();
-    }
   }
-
-  private markFormGroupTouched(): void {
-    Object.keys(this.loginForm.controls).forEach(key => {
-      const control = this.loginForm.get(key);
-      if (control) {
-        control.markAsTouched();
-      }
-    });
-  }
-
-  // Getters para facilitar o acesso aos campos no template
-  get email() { return this.loginForm.get('email'); }
-  get password() { return this.loginForm.get('password'); }
 }

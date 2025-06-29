@@ -3,42 +3,31 @@ version: '3.8'
 services:
   # Backend Laravel
   auth-backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    build: ./backend
     container_name: auth-backend
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
-      - DB_CONNECTION=mysql
-      - DB_HOST=auth-db
-      - DB_PORT=3306
-      - DB_DATABASE=auth_db
+      - DB_HOST=db-auth
+      - DB_DATABASE=authdb
       - DB_USERNAME=auth_user
       - DB_PASSWORD=auth_password
-      - JWT_SECRET=your-super-secret-jwt-key-here-change-in-production
-      - APP_ENV=local
-      - APP_DEBUG=true
-      - APP_KEY=base64:your-app-key-here
+      - JWT_SECRET=your-super-secret-jwt-key
     depends_on:
-      - auth-db
+      - db-auth
     networks:
       - auth-network
     volumes:
-      - ./backend:/var/www/html
-      - /var/www/html/vendor
-      - /var/www/html/node_modules
+      - ./backend:/var/www
 
   # Frontend Angular
   auth-frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    build: ./frontend
     container_name: auth-frontend
     ports:
-      - "4200:4200"
+      - "4201:4200"
     environment:
-      - API_URL=http://localhost:8000/api
+      - API_URL=http://localhost:8001/api
     networks:
       - auth-network
     volumes:
@@ -46,39 +35,33 @@ services:
       - /app/node_modules
 
   # Banco de Dados MariaDB
-  auth-db:
-    image: mariadb:10.9
-    container_name: auth-db
-    restart: unless-stopped
-    ports:
-      - "3306:3306"
+  db-auth:
+    image: mariadb:10.6
+    container_name: db-auth
     environment:
-      - MYSQL_DATABASE=auth_db
+      - MYSQL_ROOT_PASSWORD=root_password
+      - MYSQL_DATABASE=authdb
       - MYSQL_USER=auth_user
       - MYSQL_PASSWORD=auth_password
-      - MYSQL_ROOT_PASSWORD=root_password
-    volumes:
-      - auth_db_data:/var/lib/mysql
+    ports:
+      - "3307:3306"
     networks:
       - auth-network
+    volumes:
+      - auth-data:/var/lib/mysql
 
-  # phpMyAdmin (opcional, para desenvolvimento)
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin
-    container_name: auth-phpmyadmin
+  # MailHog para testes de email
+  mailhog:
+    image: mailhog/mailhog
+    container_name: auth-mailhog
     ports:
-      - "8080:80"
-    environment:
-      - PMA_HOST=auth-db
-      - PMA_USER=auth_user
-      - PMA_PASSWORD=auth_password
-    depends_on:
-      - auth-db
+      - "1025:1025"
+      - "8025:8025"
     networks:
       - auth-network
 
 volumes:
-  auth_db_data:
+  auth-data:
 
 networks:
   auth-network:

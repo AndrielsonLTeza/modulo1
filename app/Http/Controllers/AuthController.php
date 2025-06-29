@@ -3,26 +3,37 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Mail\ResetPasswordMail;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
-use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
-use Exception;
+use Tymon\JWTAuth\Facades\JWTAuth;
+use Tymon\JWTAuth\Exceptions\JWTException;
 
 class AuthController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth:api', ['except' => ['login', 'register', 'forgotPassword', 'resetPassword']]);
+    }
+
     /**
-     * Registrar novo usuário
+     * Registro de novo usuário
      */
-    public function register(Request $request)
+    public function register(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:6|confirmed',
-            'role' => 'in:admin,user'
+            'phone' => 'nullable|string|max:20',
+            'course' => 'nullable|string|max:100',
+            'registration_number' => 'nullable|string|max:50',
+            'user_type' => 'nullable|in:student,teacher,admin'
         ]);
 
         if ($validator->fails()) {
@@ -37,20 +48,22 @@ class AuthController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => $request->role ?? 'user',
-            'email_verified_at' => now()
+            'phone' => $request->phone,
+            'course' => $request->course,
+            'registration_number' => $request->registration_number,
+            'user_type' => $request->user_type ?? 'student'
         ]);
+
+        $token = JWTAuth::fromUser($user);
 
         return response()->json([
             'success' => true,
             'message' => 'Usuário registrado com sucesso',
             'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'role' => $user->role
-                ]
+                'user' => $user,
+                'token' => $token,
+                'token_type' => 'bearer',
+                'expires_in' => auth()->factory()->getTTL() * 60
             ]
         ], 201);
     }
@@ -58,7 +71,7 @@ class AuthController extends Controller
     /**
      * Login do usuário
      */
-    public function login(Request $request)
+    public function login(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'email' => 'required|email',
@@ -73,84 +86,73 @@ class AuthController extends Controller
             ], 422);
         }
 
-        $user = User::where('email', $request->email)->first();
+        $credentials = $request->only('email', 'password');
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        try {
+            if (!$token = JWTAuth::attempt($credentials)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Credenciais inválidas'
+                ], 401);
+            }
+        } catch (JWTException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Credenciais inválidas'
-            ], 401);
+                'message' => 'Erro ao gerar token'
+            ], 500);
         }
 
-        $token = $this->generateJWT($user);
+        $user = auth()->user();
 
         return response()->json([
             'success' => true,
             'message' => 'Login realizado com sucesso',
             'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'role' => $user->role
-                ],
+                'user' => $user,
                 'token' => $token,
-                'token_type' => 'Bearer'
+                'token_type' => 'bearer',
+                'expires_in' => auth()->factory()->getTTL() * 60
             ]
         ]);
     }
 
     /**
-     * Validar token JWT (endpoint para outros microserviços)
+     * Validação de token (para outros módulos)
      */
-    public function validateToken(Request $request)
+    public function validateToken(Request $request): JsonResponse
     {
         try {
             $token = $request->bearerToken();
             
             if (!$token) {
                 return response()->json([
-                    'success' => false,
+                    'isValid' => false,
                     'message' => 'Token não fornecido'
                 ], 401);
             }
 
-            $decoded = JWT::decode($token, new Key(config('jwt.secret'), 'HS256'));
-            
-            $user = User::find($decoded->user_id);
-            
+            JWTAuth::setToken($token);
+            $user = JWTAuth::authenticate();
+
             if (!$user) {
                 return response()->json([
-                    'success' => false,
-                    'message' => 'Usuário não encontrado'
+                    'isValid' => false,
+                    'message' => 'Token inválido'
                 ], 401);
             }
 
             return response()->json([
-                'success' => true,
-                'message' => 'Token válido',
-                'data' => [
-                    'user' => [
-                        'id' => $user->id,
-                        'name' => $user->name,
-                        'email' => $user->email,
-                        'role' => $user->role
-                    ],
-                    'token_data' => [
-                        'user_id' => $decoded->user_id,
-                        'email' => $decoded->email,
-                        'role' => $decoded->role,
-                        'exp' => $decoded->exp,
-                        'iat' => $decoded->iat
-                    ]
-                ]
+                'isValid' => true,
+                'userId' => $user->id,
+                'userEmail' => $user->email,
+                'userName' => $user->name,
+                'userType' => $user->user_type
             ]);
 
-        } catch (Exception $e) {
+        } catch (JWTException $e) {
             return response()->json([
-                'success' => false,
-                'message' => 'Token inválido',
-                'error' => $e->getMessage()
+                'isValid' => false,
+                'message' => 'Token inválido ou expirado'
             ], 401);
         }
     }
@@ -158,41 +160,62 @@ class AuthController extends Controller
     /**
      * Logout do usuário
      */
-    public function logout(Request $request)
+    public function logout(): JsonResponse
     {
-        // Em uma implementação real, você adicionaria o token em uma blacklist
-        return response()->json([
-            'success' => true,
-            'message' => 'Logout realizado com sucesso'
-        ]);
+        try {
+            JWTAuth::invalidate(JWTAuth::getToken());
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Logout realizado com sucesso'
+            ]);
+        } catch (JWTException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao fazer logout'
+            ], 500);
+        }
     }
 
     /**
-     * Obter perfil do usuário autenticado
+     * Refresh do token
      */
-    public function profile(Request $request)
+    public function refresh(): JsonResponse
     {
-        $user = $request->user;
-
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'role' => $user->role,
-                    'created_at' => $user->created_at,
-                    'updated_at' => $user->updated_at
+        try {
+            $token = JWTAuth::refresh(JWTAuth::getToken());
+            
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'token' => $token,
+                    'token_type' => 'bearer',
+                    'expires_in' => auth()->factory()->getTTL() * 60
                 ]
-            ]
+            ]);
+        } catch (JWTException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erro ao renovar token'
+            ], 500);
+        }
+    }
+
+    /**
+     * Perfil do usuário
+     */
+    public function profile(): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => auth()->user()
         ]);
     }
 
     /**
-     * Resetar senha (simulado)
+     * Esqueceu a senha
      */
-    public function resetPassword(Request $request)
+    public function forgotPassword(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'email' => 'required|email|exists:users,email'
@@ -201,42 +224,73 @@ class AuthController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Email inválido',
+                'message' => 'Email inválido ou não encontrado',
                 'errors' => $validator->errors()
             ], 422);
         }
 
-        $resetToken = Str::random(60);
-        
-        // Em uma implementação real, você salvaria o token no banco
-        // e enviaria por email
-        
+        $user = User::where('email', $request->email)->first();
+        $token = Str::random(60);
+
+        $user->update([
+            'reset_token' => $token,
+            'reset_token_expires_at' => now()->addHours(1)
+        ]);
+
+        // Simular envio de email (pode usar Mailgun, SendGrid, etc.)
+        try {
+            Mail::to($user->email)->send(new ResetPasswordMail($user, $token));
+        } catch (\Exception $e) {
+            // Log do erro, mas não expor ao usuário
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Link de recuperação enviado para o email',
-            'data' => [
-                'reset_token' => $resetToken, // Apenas para teste
-                'reset_url' => url("/password/reset/{$resetToken}")
-            ]
+            'reset_token' => $token // Apenas para desenvolvimento/teste
         ]);
     }
 
     /**
-     * Gerar JWT Token
+     * Reset de senha
      */
-    private function generateJWT($user)
+    public function resetPassword(Request $request): JsonResponse
     {
-        $payload = [
-            'iss' => config('app.url'),
-            'sub' => 'auth-service',
-            'aud' => 'eventos-universitarios',
-            'iat' => time(),
-            'exp' => time() + (60 * 60 * 24), // 24 horas
-            'user_id' => $user->id,
-            'email' => $user->email,
-            'role' => $user->role
-        ];
+        $validator = Validator::make($request->all(), [
+            'token' => 'required|string',
+            'email' => 'required|email',
+            'password' => 'required|string|min:6|confirmed'
+        ]);
 
-        return JWT::encode($payload, config('jwt.secret'), 'HS256');
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Dados inválidos',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $user = User::where('email', $request->email)
+                   ->where('reset_token', $request->token)
+                   ->where('reset_token_expires_at', '>', now())
+                   ->first();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Token inválido ou expirado'
+            ], 400);
+        }
+
+        $user->update([
+            'password' => Hash::make($request->password),
+            'reset_token' => null,
+            'reset_token_expires_at' => null
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Senha alterada com sucesso'
+        ]);
     }
 }

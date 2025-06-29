@@ -1,105 +1,93 @@
 import { Component, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
 import { AuthService, User } from '../../services/auth.service';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css']
 })
-export class DashboardComponent implements OnInit {
+export class Dashboard Component implements OnInit {
   currentUser: User | null = null;
-  loading = false;
-  error = '';
-  tokenValidation = {
-    loading: false,
-    result: null as any,
-    error: ''
-  };
-
-  // Exemplo de token para testes dos outros módulos
-  sampleToken = '';
+  token: string | null = null;
+  tokenValidation: any = null;
+  showToken = false;
 
   constructor(
     private authService: AuthService,
     private router: Router
   ) {}
 
-  ngOnInit(): void {
-    // Verificar se está autenticado
-    if (!this.authService.isAuthenticated()) {
+  ngOnInit() {
+    this.currentUser = this.authService.currentUserValue;
+    this.token = this.authService.token;
+    
+    if (!this.currentUser) {
       this.router.navigate(['/login']);
       return;
     }
 
-    this.currentUser = this.authService.getCurrentUser();
-    this.loadProfile();
-    this.generateSampleToken();
+    this.validateCurrentToken();
   }
 
-  loadProfile(): void {
-    this.loading = true;
-    this.error = '';
-
-    this.authService.getProfile().subscribe({
+  validateCurrentToken() {
+    this.authService.validateToken().subscribe({
       next: (response) => {
-        this.loading = false;
-        if (response.success && response.data) {
-          this.currentUser = response.data.user;
-        }
+        this.tokenValidation = response;
       },
       error: (error) => {
-        this.loading = false;
-        this.error = 'Erro ao carregar perfil';
-        console.error('Profile error:', error);
+        console.error('Token validation failed:', error);
+        this.tokenValidation = { isValid: false, message: 'Token inválido' };
       }
     });
   }
 
-  logout(): void {
+  refreshToken() {
+    this.authService.refreshToken().subscribe({
+      next: (response) => {
+        if (response.success) {
+          this.token = this.authService.token;
+          this.validateCurrentToken();
+          alert('Token renovado com sucesso!');
+        }
+      },
+      error: (error) => {
+        console.error('Token refresh failed:', error);
+        alert('Erro ao renovar token');
+      }
+    });
+  }
+
+  logout() {
     this.authService.logout().subscribe({
       next: () => {
         this.router.navigate(['/login']);
       },
       error: (error) => {
         console.error('Logout error:', error);
-        // Mesmo com erro, fazer logout local
         this.router.navigate(['/login']);
       }
     });
   }
 
-  testTokenValidation(): void {
-    this.tokenValidation.loading = true;
-    this.tokenValidation.error = '';
-    this.tokenValidation.result = null;
-
-    this.authService.validateToken().subscribe({
-      next: (response) => {
-        this.tokenValidation.loading = false;
-        this.tokenValidation.result = response;
-      },
-      error: (error) => {
-        this.tokenValidation.loading = false;
-        this.tokenValidation.error = error.error?.message || 'Erro na validação';
-        this.tokenValidation.result = error.error;
-      }
-    });
+  toggleToken() {
+    this.showToken = !this.showToken;
   }
 
-  private generateSampleToken(): void {
-    this.sampleToken = this.authService.getToken() || '';
+  copyToken() {
+    if (this.token) {
+      navigator.clipboard.writeText(this.token).then(() => {
+        alert('Token copiado para a área de transferência!');
+      });
+    }
   }
 
-  copyToken(): void {
-    navigator.clipboard.writeText(this.sampleToken).then(() => {
-      alert('Token copiado para a área de transferência!');
-    }).catch(() => {
-      alert('Erro ao copiar token');
-    });
-  }
-
-  isAdmin(): boolean {
-    return this.authService.isAdmin();
+  getUserTypeLabel(userType: string): string {
+    const types: { [key: string]: string } = {
+      'student': 'Estudante',
+      'teacher': 'Professor',
+      'admin': 'Administrador'
+    };
+    return types[userType] || userType;
   }
 }
