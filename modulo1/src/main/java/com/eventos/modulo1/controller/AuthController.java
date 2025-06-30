@@ -15,6 +15,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
+@CrossOrigin(origins = "http://localhost:3000")  // libera acesso do frontend React
 public class AuthController {
 
     @Autowired
@@ -60,4 +61,19 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("isValid", false));
         }
     }
+    
+    @RestController
+    public class HomeController {
+    @GetMapping("/")
+    public String home() {
+        return "Backend Spring Boot rodando!";
+    }
+
+    @GetMapping("/api")
+    public String apiHome() {
+        return "API de autenticação disponível em /api/register, /api/login, /api/validate-token";
+    }
+   }
+   
+
 }

@@ -1,0 +1,50 @@
+// src/Dashboard.js
+import { useEffect, useState } from "react";
+import { validateToken } from "./api";
+import { useNavigate } from "react-router-dom";
+
+export default function Dashboard() {
+  const [data, setData] = useState(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    validateToken(token)
+      .then(res => {
+        if (res.isValid) {
+          setData(res);
+        } else {
+          localStorage.removeItem("token");
+          navigate("/login");
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem("token");
+        navigate("/login");
+      });
+  }, [navigate]);
+
+  return (
+    <div>
+      <h2>Dashboard</h2>
+      {data ? (
+        <div>
+          <p>Email: {data.email}</p>
+          <p>Name: {data.name}</p>
+          <p>Token válido ✅</p>
+        </div>
+      ) : (
+        <p>Validando token...</p>
+      )}
+      <button onClick={() => {
+        localStorage.removeItem("token");
+        navigate("/login");
+      }}>Logout</button>
+    </div>
+  );
+}
