@@ -14,7 +14,7 @@ Este repositório contém um sistema completo de autenticação com frontend, ba
 ---
 
 ## 📂 Estrutura do Projeto
-
+```
 /
 ├── backend/
 │ ├── src/
@@ -27,11 +27,7 @@ Este repositório contém um sistema completo de autenticação com frontend, ba
 ├── mysql-init/
 │ └── init.sql
 └── docker-compose.yml
-
-yaml
-Copiar
-Editar
-
+```
 ---
 
 ## ⚙️ Como Executar
@@ -43,24 +39,21 @@ Editar
 
 ### 2️⃣ Build dos containers
 
-```bash
+```
 docker compose build
+```
 3️⃣ Subir os serviços
-bash
-Copiar
-Editar
+```
 docker compose up
+```
 ou em segundo plano:
-
-bash
-Copiar
-Editar
+```
 docker compose up -d
+```
 4️⃣ Parar os serviços
-bash
-Copiar
-Editar
+```
 docker compose down
+```
 🌐 Serviços Disponíveis
 Serviço	Descrição	URL Local
 backend	API Spring Boot	http://localhost:8080
@@ -85,17 +78,13 @@ refresh_token
 
 📝 Variáveis de Ambiente Importantes
 Backend:
-
-ini
-Copiar
-Editar
+```
 SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/authdb
 SPRING_DATASOURCE_USERNAME=root
 SPRING_DATASOURCE_PASSWORD=root
+```
 MySQL:
-
-ini
-Copiar
-Editar
+```
 MYSQL_ROOT_PASSWORD=root
 MYSQL_DATABASE=authdb
+```
